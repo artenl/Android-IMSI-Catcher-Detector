@@ -39,6 +39,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourcePolicy
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import java.io.File
@@ -92,11 +93,20 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
             // CacheManager. This source permits bulk; a meaningful user-agent is
             // set via Configuration. Keep downloads to small areas.
             setTileSource(bulkOsmSource())
-            setMultiTouchControls(true)
             // Load tiles live while browsing (and cache them). Downloaded tiles
             // then work offline. Monitoring never touches the network; only this
             // map tab does, when open.
             setUseDataConnection(true)
+            // Readable tiles on high-DPI screens (otherwise labels are tiny).
+            isTilesScaledToDpi = true
+            // Pinch-to-zoom only; the floating +/- buttons overlapped the map.
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            // Sane zoom bounds and no infinite grey world when panning.
+            minZoomLevel = 4.0
+            maxZoomLevel = 19.0
+            setHorizontalMapRepetitionEnabled(false)
+            setVerticalMapRepetitionEnabled(false)
             controller.setZoom(15.0)
             controller.setCenter(GeoPoint(48.8566, 2.3522)) // Paris, until we have a fix
         }
