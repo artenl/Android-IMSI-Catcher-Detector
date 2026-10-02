@@ -10,7 +10,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.cellularprivacy.detector"
+        applicationId = "com.stingrayfuzz"
         minSdk = 31          // Android 12: TelephonyCallback + per-SIM 2G toggle
         targetSdk = 35       // Android 15
         versionCode = 1

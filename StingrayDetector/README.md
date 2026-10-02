@@ -1,4 +1,4 @@
-# IMSI-Catcher Detector NG
+# Stingray Fuzz
 
 Ground-up rewrite of AIMSICD for modern Android (minSdk 31 / Android 12,
 target 35). Passive detection of likely cell-site simulators (IMSI-catchers /

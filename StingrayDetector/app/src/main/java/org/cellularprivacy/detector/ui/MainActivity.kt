@@ -148,7 +148,7 @@ private fun DeckScreen() {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            "// IMSI-CATCHER DETECTOR //",
+            "// STINGRAY FUZZ //",
             color = Term.GreenDim,
             fontWeight = FontWeight.Bold
         )

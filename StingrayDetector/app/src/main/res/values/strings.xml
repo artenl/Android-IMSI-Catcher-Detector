@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">IMSI-Catcher Detector</string>
+    <string name="app_name">Stingray Fuzz</string>
     <string name="monitoring_channel">Cell monitoring</string>
     <string name="monitoring_active">Monitoring cellular network</string>
     <string name="alert_channel">Threat alerts</string>
