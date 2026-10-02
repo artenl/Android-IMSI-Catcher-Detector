@@ -40,6 +40,7 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import java.io.File
 import java.util.Locale
 import kotlin.math.cos
 
@@ -62,9 +63,14 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     val scope = rememberCoroutineScope()
 
     val map = remember {
-        Configuration.getInstance()
-            .load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = ctx.packageName
+        val conf = Configuration.getInstance()
+        conf.load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+        conf.userAgentValue = ctx.packageName
+        // Explicit, app-private cache dirs so tile writing never hits a missing
+        // path (a common osmdroid crash on first download).
+        val base = File(ctx.cacheDir, "osmdroid").apply { mkdirs() }
+        conf.osmdroidBasePath = base
+        conf.osmdroidTileCache = File(base, "tiles").apply { mkdirs() }
         MapView(ctx).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
@@ -193,26 +199,37 @@ private suspend fun geocode(ctx: Context, query: String): GeoPoint? {
 
 /** Download a box of the given radius (metres) around the current map centre. */
 private fun downloadRadius(ctx: Context, map: MapView, radiusM: Int, onStatus: (String) -> Unit) {
-    val c = map.mapCenter
-    val latSpan = radiusM / 111_320.0
-    val lonSpan = radiusM / (111_320.0 * cos(Math.toRadians(c.latitude)))
-    val bb = BoundingBox(
-        c.latitude + latSpan, c.longitude + lonSpan,
-        c.latitude - latSpan, c.longitude - lonSpan
-    )
-    map.setUseDataConnection(true)
-    val cm = CacheManager(map)
-    cm.downloadAreaAsync(ctx, bb, 12, 16, object : CacheManager.CacheManagerCallback {
-        override fun onTaskComplete() {
-            map.setUseDataConnection(false); onStatus("Carte telechargee. Mode hors-ligne reactive.")
+    try {
+        val c = map.mapCenter
+        if (c.latitude == 0.0 && c.longitude == 0.0) {
+            onStatus("Centre la carte sur une adresse d'abord (bouton ALLER).")
+            return
         }
-        override fun onTaskFailed(errors: Int) {
-            map.setUseDataConnection(false); onStatus("Termine avec $errors erreurs. Hors-ligne reactive.")
-        }
-        override fun updateProgress(progress: Int, currentZoomLevel: Int, zoomMin: Int, zoomMax: Int) {
-            onStatus("Telechargement $progress% (zoom $currentZoomLevel/$zoomMax)")
-        }
-        override fun downloadStarted() { onStatus("Telechargement demarre...") }
-        override fun setPossibleTilesInArea(total: Int) { onStatus("Tuiles a recuperer: $total") }
-    })
+        val latSpan = radiusM / 111_320.0
+        val lonSpan = radiusM / (111_320.0 * cos(Math.toRadians(c.latitude)))
+        val bb = BoundingBox(
+            c.latitude + latSpan, c.longitude + lonSpan,
+            c.latitude - latSpan, c.longitude - lonSpan
+        )
+        map.setUseDataConnection(true)
+        val cm = CacheManager(map)
+        cm.downloadAreaAsync(ctx, bb, 12, 16, object : CacheManager.CacheManagerCallback {
+            override fun onTaskComplete() {
+                runCatching { map.setUseDataConnection(false) }
+                onStatus("Carte telechargee. Mode hors-ligne reactive.")
+            }
+            override fun onTaskFailed(errors: Int) {
+                runCatching { map.setUseDataConnection(false) }
+                onStatus("Termine avec $errors erreurs. Hors-ligne reactive.")
+            }
+            override fun updateProgress(progress: Int, currentZoomLevel: Int, zoomMin: Int, zoomMax: Int) {
+                onStatus("Telechargement $progress% (zoom $currentZoomLevel/$zoomMax)")
+            }
+            override fun downloadStarted() { onStatus("Telechargement demarre...") }
+            override fun setPossibleTilesInArea(total: Int) { onStatus("Tuiles a recuperer: $total") }
+        })
+    } catch (t: Throwable) {
+        runCatching { map.setUseDataConnection(false) }
+        onStatus("Erreur telechargement: ${t.message ?: t.javaClass.simpleName}")
+    }
 }

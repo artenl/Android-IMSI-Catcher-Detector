@@ -55,8 +55,20 @@ fun MapRadar(
 
         if (userLat == null || userLon == null) {
             Text(
-                "Position inconnue. Active la localisation et lance la surveillance " +
-                    "pour accumuler des mesures.",
+                "Radar vide pour l'instant.\n\n" +
+                    "1. Onglet STATUT > DEMARRER LA SURVEILLANCE.\n" +
+                    "2. Place-toi a l'air libre quelques instants (il faut un point GPS).\n" +
+                    "3. Deplace-toi un peu : les antennes se positionnent par triangulation.\n\n" +
+                    "Verifie que la ligne CELLULE en haut se remplit : si elle reste a --, " +
+                    "la surveillance ne recoit pas encore de donnees.",
+                color = Term.Muted
+            )
+            return@Column
+        }
+        if (cells.isEmpty()) {
+            Text(
+                "Position acquise, mais aucune antenne estimee. Laisse tourner la " +
+                    "surveillance et deplace-toi un peu pour trianguler.",
                 color = Term.Muted
             )
             return@Column
