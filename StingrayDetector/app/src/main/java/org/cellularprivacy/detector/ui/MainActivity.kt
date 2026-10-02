@@ -55,6 +55,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.cellularprivacy.detector.data.DetectionEventEntity
 import org.cellularprivacy.detector.data.DetectorDatabase
+import org.cellularprivacy.detector.data.ObservedCellEntity
+import org.cellularprivacy.detector.locate.CellLocator
+import org.cellularprivacy.detector.locate.Observation
 import org.cellularprivacy.detector.detect.DetectorState
 import org.cellularprivacy.detector.harden.HardeningAdvisor
 import org.cellularprivacy.detector.model.ThreatLevel
@@ -115,11 +118,14 @@ private fun DeckScreen() {
 
     val db = remember { DetectorDatabase.get(ctx) }
     val events by db.detectionEventDao().recent(100).collectAsState(initial = emptyList())
+    val observed by db.observedCellDao().recent(500).collectAsState(initial = emptyList())
+    val radar = remember(observed, events) { buildRadar(observed, events) }
 
     var showHarden by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var show2gPrompt by remember { mutableStateOf(false) }
     var showRadioWarn by remember { mutableStateOf(false) }
+    var showMap by remember { mutableStateOf(false) }
 
     // Propose disabling 2G on open (the best preventive measure), unless the
     // user asked not to be reminded or the OS cannot offer it.
@@ -157,8 +163,9 @@ private fun DeckScreen() {
             accent = accent,
             onArm = { MonitoringService.start(ctx) },
             onDisarm = { MonitoringService.stop(ctx) },
-            onHarden = { showHarden = !showHarden; showSettings = false },
-            onSettings = { showSettings = !showSettings; showHarden = false },
+            onHarden = { showHarden = !showHarden; showSettings = false; showMap = false },
+            onSettings = { showSettings = !showSettings; showHarden = false; showMap = false },
+            onMap = { showMap = !showMap; showHarden = false; showSettings = false },
             onZone = { DetectorState.setZoneMode(!live.zoneMode) },
             onPanic = { panic.execute(PanicAction.CUT_RADIO) }
         )
@@ -171,6 +178,7 @@ private fun DeckScreen() {
         }
 
         when {
+            showMap -> MapRadar(radar.first?.first, radar.first?.second, radar.second)
             showHarden -> HardenPanel(advisor, onOpen = { intent -> runCatching { ctx.startActivity(intent) } })
             showSettings -> SettingsPanel(
                 cfg = cfg,
@@ -297,6 +305,7 @@ private fun CommandRow(
     onDisarm: () -> Unit,
     onHarden: () -> Unit,
     onSettings: () -> Unit,
+    onMap: () -> Unit,
     onZone: () -> Unit,
     onPanic: () -> Unit
 ) {
@@ -309,8 +318,9 @@ private fun CommandRow(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DeckButton("CONFIG", Term.Green, Modifier.width(120.dp), onClick = onSettings)
-            DeckButton("PANIC", Term.Red, Modifier.width(120.dp), onClick = onPanic)
+            DeckButton("MAP", Term.Green, Modifier.width(120.dp), onClick = onMap)
         }
+        DeckButton("PANIC", Term.Red, Modifier.fillMaxWidth(), onClick = onPanic)
         DeckButton(
             text = if (zoneMode) "ZONE MODE: ON" else "ZONE MODE: OFF",
             accent = if (zoneMode) Term.Amber else Term.GreenDim,
@@ -467,4 +477,32 @@ private fun actionLabel(a: PanicAction): String = when (a) {
     PanicAction.ALERT -> "ALERTE (plein ecran + alarme)"
     PanicAction.LOCK -> "VERROU (anti-saisie, ne stoppe PAS la collecte)"
     PanicAction.CUT_RADIO -> "COUPER RADIO (mode avion / extinction si root)"
+}
+
+
+/** Build the offline radar model from stored observations and detection events. */
+private fun buildRadar(
+    observed: List<ObservedCellEntity>,
+    events: List<DetectionEventEntity>
+): Pair<Pair<Double, Double>?, List<PlacedCell>> {
+    val withLoc = observed.filter { it.lat != null && it.lon != null }
+    val user = withLoc.maxByOrNull { it.timestampMs }?.let { it.lat!! to it.lon!! }
+
+    val levelByCell: Map<String, ThreatLevel> = events
+        .filter { it.cellKey != null }
+        .groupBy { it.cellKey!! }
+        .mapValues { (_, evs) ->
+            evs.mapNotNull { runCatching { ThreatLevel.valueOf(it.threatLevel) }.getOrNull() }
+                .maxByOrNull { it.ordinal } ?: ThreatLevel.NORMAL
+        }
+
+    val placed = withLoc.groupBy { it.cellKey }.mapNotNull { (key, obs) ->
+        val est = CellLocator.estimate(
+            obs.map { Observation(it.lat!!, it.lon!!, it.dbm) }
+        ) ?: return@mapNotNull null
+        val last = obs.maxByOrNull { it.timestampMs }!!
+        val label = "${last.rat} CID:${last.cellId ?: "?"}"
+        PlacedCell(label, est, levelByCell[key] ?: ThreatLevel.NORMAL)
+    }
+    return user to placed
 }
