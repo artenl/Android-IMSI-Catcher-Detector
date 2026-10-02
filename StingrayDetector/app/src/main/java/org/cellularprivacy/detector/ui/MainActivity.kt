@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -58,11 +59,15 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.cellularprivacy.detector.BuildConfig
+import org.cellularprivacy.detector.crash.CrashLogger
 import org.cellularprivacy.detector.data.DetectionEventEntity
 import org.cellularprivacy.detector.data.DetectorDatabase
 import org.cellularprivacy.detector.data.ObservedCellEntity
@@ -137,6 +142,9 @@ private fun DeckScreen() {
     var tab by remember { mutableIntStateOf(TAB_STATUS) }
     var show2gPrompt by remember { mutableStateOf(false) }
     var showRadioWarn by remember { mutableStateOf(false) }
+    var crashLog by remember {
+        mutableStateOf(if (BuildConfig.CRASH_LOGGER) CrashLogger.readLast(ctx) else null)
+    }
 
     val twoG = remember { advisor.buildAdvice().firstOrNull { it.id == "disable_2g" } }
     LaunchedEffect(cfg.hideTwoGPrompt) {
@@ -263,6 +271,32 @@ private fun DeckScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { showRadioWarn = false }) { Text("ANNULER", color = Term.Muted) }
+            }
+        )
+    }
+
+    crashLog?.let { log ->
+        AlertDialog(
+            containerColor = Term.Surface,
+            titleContentColor = Term.Red,
+            textContentColor = Term.Muted,
+            onDismissRequest = { crashLog = null },
+            title = { Text("DERNIER CRASH DETECTE") },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Text(log, color = Term.Muted, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("crash", log))
+                }) { Text("COPIER", color = Term.Green) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    CrashLogger.clear(ctx); crashLog = null
+                }) { Text("EFFACER", color = Term.Muted) }
             }
         )
     }

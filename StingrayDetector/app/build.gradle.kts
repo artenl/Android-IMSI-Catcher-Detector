@@ -16,6 +16,9 @@ android {
         versionCode = 1
         versionName = "0.1.0-ng"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Debug crash sensor. Set to "false" before the real release.
+        buildConfigField("boolean", "CRASH_LOGGER", "true")
     }
 
     buildTypes {
@@ -38,7 +41,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 
     testOptions {
         unitTests {

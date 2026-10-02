@@ -64,6 +64,13 @@ repository is public under its owner's account, and the file's distribution
 channel (email, messaging, cloud link) can identify the sender. Neutralising
 the APK does not neutralise those.
 
+## Before a real release
+
+A debug crash sensor is active: `buildConfigField CRASH_LOGGER = true` in
+`app/build.gradle.kts`. It writes any uncaught stack trace to a file and shows it
+on next launch (with a copy button) so testers can report crashes. Set it to
+`false` before a real release to compile it out.
+
 ## Roadmap
 
 1. External database cross-check (OpenCelliD, beaconDB).

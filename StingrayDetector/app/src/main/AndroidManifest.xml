@@ -17,6 +17,7 @@
     <uses-feature android:name="android.hardware.telephony" android:required="true" />
 
     <application
+        android:name=".StingrayApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
