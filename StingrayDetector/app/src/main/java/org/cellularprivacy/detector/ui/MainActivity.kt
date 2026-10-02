@@ -31,11 +31,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +117,14 @@ private fun DeckScreen() {
 
     var showHarden by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var show2gPrompt by remember { mutableStateOf(false) }
+
+    // Propose disabling 2G on open (the best preventive measure), unless the
+    // user asked not to be reminded or the OS cannot offer it.
+    val twoG = remember { advisor.buildAdvice().firstOrNull { it.id == "disable_2g" } }
+    LaunchedEffect(cfg.hideTwoGPrompt) {
+        show2gPrompt = !cfg.hideTwoGPrompt && (twoG?.available == true)
+    }
 
     val adminLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -138,13 +151,22 @@ private fun DeckScreen() {
 
         CommandRow(
             monitoring = live.monitoring,
+            zoneMode = live.zoneMode,
             accent = accent,
             onArm = { MonitoringService.start(ctx) },
             onDisarm = { MonitoringService.stop(ctx) },
             onHarden = { showHarden = !showHarden; showSettings = false },
             onSettings = { showSettings = !showSettings; showHarden = false },
+            onZone = { DetectorState.setZoneMode(!live.zoneMode) },
             onPanic = { panic.execute(PanicAction.CUT_RADIO) }
         )
+
+        if (live.zoneMode) {
+            Text(
+                "// ZONE MODE ARME : toute suspicion coupera la radio //",
+                color = Term.Amber, fontWeight = FontWeight.Bold
+            )
+        }
 
         when {
             showHarden -> HardenPanel(advisor, onOpen = { intent -> runCatching { ctx.startActivity(intent) } })
@@ -158,6 +180,34 @@ private fun DeckScreen() {
             )
             else -> EventLog(events)
         }
+    }
+
+    if (show2gPrompt && twoG != null) {
+        AlertDialog(
+            containerColor = Term.Surface,
+            titleContentColor = Term.Green,
+            textContentColor = Term.Muted,
+            onDismissRequest = { show2gPrompt = false },
+            title = { Text("PROTECTION: DESACTIVER LA 2G") },
+            text = {
+                Text(
+                    twoG.rationale + "\n\nC'est la meilleure protection preventive : " +
+                        "elle bloque la retrogradation forcee des IMSI-catchers sans couper votre reseau."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    show2gPrompt = false
+                    twoG.settingsIntent?.let { runCatching { ctx.startActivity(it) } }
+                }) { Text("OUVRIR LES REGLAGES", color = Term.Green) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    show2gPrompt = false
+                    scope.launch { settings.setHideTwoGPrompt(true) }
+                }) { Text("NE PLUS PROPOSER", color = Term.Muted) }
+            }
+        )
     }
 }
 
@@ -207,11 +257,13 @@ private fun ScoreBar(score: Int, accent: Color) {
 @Composable
 private fun CommandRow(
     monitoring: Boolean,
+    zoneMode: Boolean,
     accent: Color,
     onArm: () -> Unit,
     onDisarm: () -> Unit,
     onHarden: () -> Unit,
     onSettings: () -> Unit,
+    onZone: () -> Unit,
     onPanic: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -225,6 +277,12 @@ private fun CommandRow(
             DeckButton("CONFIG", Term.Green, Modifier.width(120.dp), onClick = onSettings)
             DeckButton("PANIC", Term.Red, Modifier.width(120.dp), onClick = onPanic)
         }
+        DeckButton(
+            text = if (zoneMode) "ZONE MODE: ON" else "ZONE MODE: OFF",
+            accent = if (zoneMode) Term.Amber else Term.GreenDim,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onZone
+        )
     }
 }
 

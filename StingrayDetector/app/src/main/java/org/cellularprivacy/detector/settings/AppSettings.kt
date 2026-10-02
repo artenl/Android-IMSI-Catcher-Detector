@@ -40,18 +40,21 @@ class AppSettings(private val context: Context) {
     private val keyAutoProtect = booleanPreferencesKey("auto_protect")
     private val keyPanicAction = stringPreferencesKey("panic_action")
     private val keyRequireConfirm = booleanPreferencesKey("panic_require_confirm")
+    private val keyHideTwoGPrompt = booleanPreferencesKey("hide_2g_prompt")
 
     data class Values(
         val autoProtect: Boolean = true,
         val panicAction: PanicAction = PanicAction.ALERT,
-        val requireConfirm: Boolean = true
+        val requireConfirm: Boolean = true,
+        val hideTwoGPrompt: Boolean = false
     )
 
     val values: Flow<Values> = context.dataStore.data.map { p ->
         Values(
             autoProtect = p[keyAutoProtect] ?: true,
             panicAction = PanicAction.fromName(p[keyPanicAction]),
-            requireConfirm = p[keyRequireConfirm] ?: true
+            requireConfirm = p[keyRequireConfirm] ?: true,
+            hideTwoGPrompt = p[keyHideTwoGPrompt] ?: false
         )
     }
 
@@ -63,4 +66,7 @@ class AppSettings(private val context: Context) {
 
     suspend fun setRequireConfirm(on: Boolean) =
         context.dataStore.edit { it[keyRequireConfirm] = on }.let { }
+
+    suspend fun setHideTwoGPrompt(on: Boolean) =
+        context.dataStore.edit { it[keyHideTwoGPrompt] = on }.let { }
 }

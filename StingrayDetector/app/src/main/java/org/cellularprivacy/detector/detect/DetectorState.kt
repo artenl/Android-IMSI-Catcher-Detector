@@ -18,7 +18,9 @@ object DetectorState {
         val level: ThreatLevel = ThreatLevel.NORMAL,
         val score: Int = 0,
         val servingSummary: String = "--",
-        val lastUpdateMs: Long = 0L
+        val lastUpdateMs: Long = 0L,
+        /** Pre-armed "sensitive zone" mode: any suspicion cuts the radio. */
+        val zoneMode: Boolean = false
     )
 
     private val _state = MutableStateFlow(Live())
@@ -26,6 +28,10 @@ object DetectorState {
 
     fun setMonitoring(on: Boolean) {
         _state.value = _state.value.copy(monitoring = on)
+    }
+
+    fun setZoneMode(on: Boolean) {
+        _state.value = _state.value.copy(zoneMode = on)
     }
 
     fun update(assessment: Assessment, servingSummary: String) {

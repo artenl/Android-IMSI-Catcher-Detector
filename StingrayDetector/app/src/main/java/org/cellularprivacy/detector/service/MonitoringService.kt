@@ -92,8 +92,14 @@ class MonitoringService : Service() {
                 if (assessment.level >= ThreatLevel.SUSPICIOUS) {
                     notifyThreat(assessment.level, assessment.score)
                 }
-                if (assessment.level >= ThreatLevel.HIGH && settingsCache.autoProtect) {
-                    maybePanic()
+                val zone = DetectorState.state.value.zoneMode
+                // In zone mode any SUSPICIOUS reading cuts the radio; otherwise
+                // we only auto-protect at HIGH, and only if the user enabled it.
+                val shouldProtect =
+                    (zone && assessment.level >= ThreatLevel.SUSPICIOUS) ||
+                    (settingsCache.autoProtect && assessment.level >= ThreatLevel.HIGH)
+                if (shouldProtect) {
+                    maybePanic(zone)
                 }
                 // Persist the serving cell observation, geo-tagged.
                 serving?.let { c ->
@@ -172,12 +178,15 @@ class MonitoringService : Service() {
     }
 
     /** Fire the configured protective action, rate-limited to once per minute. */
-    private fun maybePanic() {
+    private fun maybePanic(zoneForced: Boolean) {
         val now = System.currentTimeMillis()
         if (now - lastPanicMs < 60_000L) return
         lastPanicMs = now
-        if (settingsCache.panicAction != PanicAction.NONE) {
-            panic.execute(settingsCache.panicAction)
+        // Zone mode overrides the configured action with the only one that
+        // actually stops collection.
+        val action = if (zoneForced) PanicAction.CUT_RADIO else settingsCache.panicAction
+        if (action != PanicAction.NONE) {
+            panic.execute(action)
         }
     }
 
