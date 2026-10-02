@@ -143,7 +143,7 @@ private fun DeckScreen() {
             onDisarm = { MonitoringService.stop(ctx) },
             onHarden = { showHarden = !showHarden; showSettings = false },
             onSettings = { showSettings = !showSettings; showHarden = false },
-            onPanic = { panic.execute(PanicAction.PANIC_FULL) }
+            onPanic = { panic.execute(PanicAction.CUT_RADIO) }
         )
 
         when {
@@ -323,7 +323,7 @@ private fun SettingsPanel(
             val selected = cfg.panicAction == action
             DeckButton(
                 text = (if (selected) "[x] " else "[ ] ") + actionLabel(action),
-                accent = if (action == PanicAction.PANIC_FULL) Term.Red else Term.Green,
+                accent = if (action == PanicAction.CUT_RADIO) Term.Red else Term.Green,
                 modifier = Modifier.fillMaxWidth()
             ) { onAction(action) }
         }
@@ -345,8 +345,8 @@ private fun SettingsPanel(
 }
 
 private fun actionLabel(a: PanicAction): String = when (a) {
-    PanicAction.NONE -> "NONE (notif only)"
-    PanicAction.NOTIFY -> "ALERT (full-screen + alarm)"
-    PanicAction.LOCK -> "LOCK (alert + lock screen)"
-    PanicAction.PANIC_FULL -> "PANIC (lock + cut radio if root)"
+    PanicAction.NONE -> "NONE (notif seule)"
+    PanicAction.ALERT -> "ALERTE (plein ecran + alarme)"
+    PanicAction.LOCK -> "VERROU (anti-saisie, ne stoppe PAS la collecte)"
+    PanicAction.CUT_RADIO -> "COUPER RADIO (mode avion / extinction si root)"
 }

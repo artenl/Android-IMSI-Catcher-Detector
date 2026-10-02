@@ -26,7 +26,9 @@ import kotlinx.coroutines.flow.onEach
 import org.cellularprivacy.detector.R
 import org.cellularprivacy.detector.collect.CellCollector
 import org.cellularprivacy.detector.data.DetectionEventEntity
+import org.cellularprivacy.detector.collect.LocationProvider
 import org.cellularprivacy.detector.data.DetectorDatabase
+import org.cellularprivacy.detector.data.ObservedCellEntity
 import org.cellularprivacy.detector.detect.DetectionEngine
 import org.cellularprivacy.detector.model.ThreatLevel
 
@@ -46,8 +48,8 @@ class MonitoringService : Service() {
     @Volatile private var settingsCache = AppSettings.Values()
     @Volatile private var lastPanicMs = 0L
 
-    // Wired to the accelerometer in a later slice; false = treat as stationary.
-    @Volatile private var deviceMoving = false
+    private lateinit var accelerometer: AccelerometerMonitor
+    private lateinit var location: LocationProvider
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,6 +58,10 @@ class MonitoringService : Service() {
         collector = CellCollector(this)
         settings = AppSettings(this)
         panic = PanicController(this)
+        accelerometer = AccelerometerMonitor(this)
+        location = LocationProvider(this)
+        accelerometer.start()
+        location.start()
         createChannels()
         scope.launch { settings.values.collect { settingsCache = it } }
         DetectorState.setMonitoring(true)
@@ -74,7 +80,9 @@ class MonitoringService : Service() {
         collector.cellUpdates()
             .catch { /* permission revoked or modem error: stop quietly */ }
             .onEach { batch ->
-                val assessment = engine.process(batch, operator, deviceMoving)
+                val moving = accelerometer.isMoving()
+                val loc = location.last
+                val assessment = engine.process(batch, operator, moving)
                 val serving = batch.firstOrNull { it.registered } ?: batch.firstOrNull()
                 val summary = serving?.let {
                     "${it.rat.name} ${it.mcc ?: "?"}/${it.mnc ?: "?"} CID:${it.cellId ?: "?"} ${it.dbm ?: "?"}dBm"
@@ -87,6 +95,18 @@ class MonitoringService : Service() {
                 if (assessment.level >= ThreatLevel.HIGH && settingsCache.autoProtect) {
                     maybePanic()
                 }
+                // Persist the serving cell observation, geo-tagged.
+                serving?.let { c ->
+                    db.observedCellDao().insert(
+                        ObservedCellEntity(
+                            cellKey = c.key, rat = c.rat.name,
+                            mcc = c.mcc, mnc = c.mnc, areaCode = c.areaCode,
+                            cellId = c.cellId, physicalId = c.physicalId, arfcn = c.arfcn,
+                            dbm = c.dbm, lat = loc?.latitude, lon = loc?.longitude,
+                            timestampMs = c.timestampMs
+                        )
+                    )
+                }
                 for (r in assessment.contributing) {
                     db.detectionEventDao().insert(
                         DetectionEventEntity(
@@ -96,8 +116,8 @@ class MonitoringService : Service() {
                             score = r.score,
                             threatLevel = assessment.level.name,
                             cellKey = serving?.key,
-                            lat = null,
-                            lon = null,
+                            lat = loc?.latitude,
+                            lon = loc?.longitude,
                             timestampMs = r.timestampMs
                         )
                     )
@@ -163,6 +183,8 @@ class MonitoringService : Service() {
 
     override fun onDestroy() {
         DetectorState.setMonitoring(false)
+        runCatching { accelerometer.stop() }
+        runCatching { location.stop() }
         scope.cancel()
         super.onDestroy()
     }

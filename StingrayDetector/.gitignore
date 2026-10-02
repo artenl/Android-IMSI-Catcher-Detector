@@ -9,3 +9,8 @@ captures/
 
 # built APK artifacts (sent out-of-band / via CI release)
 /dist/
+
+# signing secrets
+keystore.properties
+*.jks
+*.keystore

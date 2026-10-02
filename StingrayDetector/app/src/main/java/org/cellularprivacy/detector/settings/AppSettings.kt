@@ -10,16 +10,25 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-/** What the app does automatically when the threat level reaches HIGH. */
+/**
+ * What the app does automatically when the threat level reaches HIGH.
+ *
+ * Ordered by how much it actually protects against *radio-layer* data
+ * collection. A screen lock does NOT stop an IMSI-catcher: the modem stays
+ * registered and keeps answering identity requests. Only cutting the radio
+ * (airplane mode / power off) stops ongoing collection, and even then only
+ * from that moment on. So CUT_RADIO is the meaningful protective action; LOCK
+ * is kept only as an anti-seizure measure and labelled as such.
+ */
 enum class PanicAction {
     NONE,        // only the standing notification
-    NOTIFY,      // high-priority full-screen alert
-    LOCK,        // alert + lock the screen now (needs Device Admin)
-    PANIC_FULL;  // alert + lock + cut radios / power off if root is available
+    ALERT,       // high-priority full-screen alert + alarm (so the user can act)
+    LOCK,        // ALERT + lock screen (anti-seizure only; does NOT stop collection)
+    CUT_RADIO;   // ALERT + cut the radio: airplane/power-off via root, else open airplane settings
 
     companion object {
         fun fromName(name: String?): PanicAction =
-            entries.firstOrNull { it.name == name } ?: NOTIFY
+            entries.firstOrNull { it.name == name } ?: ALERT
     }
 }
 
@@ -34,7 +43,7 @@ class AppSettings(private val context: Context) {
 
     data class Values(
         val autoProtect: Boolean = true,
-        val panicAction: PanicAction = PanicAction.NOTIFY,
+        val panicAction: PanicAction = PanicAction.ALERT,
         val requireConfirm: Boolean = true
     )
 

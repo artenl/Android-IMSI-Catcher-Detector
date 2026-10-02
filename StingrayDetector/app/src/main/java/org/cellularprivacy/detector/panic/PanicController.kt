@@ -21,7 +21,7 @@ import org.cellularprivacy.detector.settings.PanicAction
  *   - raise a loud full-screen alert + vibration,
  *   - fire a PanicKit TRIGGER broadcast for installed panic responders.
  * Real radio cut / power-off is only possible with root, attempted on a
- * best-effort basis in [PanicAction.PANIC_FULL]; otherwise we fall back to the
+ * best-effort basis in [PanicAction.CUT_RADIO]; otherwise we fall back to the
  * above and send the user to airplane-mode settings.
  */
 class PanicController(private val context: Context) {
@@ -42,12 +42,20 @@ class PanicController(private val context: Context) {
             )
         }
 
-    /** Run the configured action. [PanicAction.NONE]/[NOTIFY] handled by caller. */
+    /** Run the configured action. */
     fun execute(action: PanicAction) {
         when (action) {
-            PanicAction.NONE, PanicAction.NOTIFY -> alert()
+            PanicAction.NONE, PanicAction.ALERT -> alert()
             PanicAction.LOCK -> { alert(); lockNow() }
-            PanicAction.PANIC_FULL -> { alert(); triggerPanicKit(); if (!tryRootCutoff()) lockNow() }
+            PanicAction.CUT_RADIO -> {
+                alert()
+                triggerPanicKit()
+                // Lock too (cheap, anti-seizure). Then cut the radio: root does
+                // it outright; otherwise send the user to airplane settings,
+                // since an app cannot toggle it unaided.
+                lockNow()
+                if (!tryRootCutoff()) openAirplaneSettings()
+            }
         }
     }
 
@@ -102,6 +110,11 @@ class PanicController(private val context: Context) {
         val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmds.joinToString(" ; ")))
         p.waitFor() == 0
     }.getOrDefault(false)
+
+    /** Best-effort: open airplane-mode settings (we cannot toggle it unaided). */
+    private fun openAirplaneSettings() {
+        runCatching { context.startActivity(airplaneSettingsIntent()) }
+    }
 
     /** Deep-link the user to airplane-mode settings when we cannot force it. */
     fun airplaneSettingsIntent(): Intent =
