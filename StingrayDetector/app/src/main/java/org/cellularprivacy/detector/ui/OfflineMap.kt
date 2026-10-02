@@ -5,6 +5,8 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.location.Geocoder
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,11 +26,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +71,32 @@ private fun bulkOsmSource(): XYTileSource = XYTileSource(
     )
 )
 
+/** Builds a configured osmdroid MapView (shared by the inline and fullscreen maps). */
+private fun configuredMap(ctx: Context, showZoomButtons: Boolean = false): MapView {
+    val conf = Configuration.getInstance()
+    conf.load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+    conf.userAgentValue = ctx.packageName
+    val base = File(ctx.cacheDir, "osmdroid").apply { mkdirs() }
+    conf.osmdroidBasePath = base
+    conf.osmdroidTileCache = File(base, "tiles").apply { mkdirs() }
+    return MapView(ctx).apply {
+        setTileSource(bulkOsmSource())
+        setUseDataConnection(true)
+        isTilesScaledToDpi = true
+        setMultiTouchControls(true)
+        zoomController.setVisibility(
+            if (showZoomButtons) CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT
+            else CustomZoomButtonsController.Visibility.NEVER
+        )
+        minZoomLevel = 4.0
+        maxZoomLevel = 19.0
+        setHorizontalMapRepetitionEnabled(false)
+        setVerticalMapRepetitionEnabled(false)
+        controller.setZoom(15.0)
+        controller.setCenter(GeoPoint(48.8566, 2.3522))
+    }
+}
+
 private fun dot(argb: Int): Drawable = GradientDrawable().apply {
     shape = GradientDrawable.OVAL
     setColor(argb)
@@ -86,43 +117,13 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     val db = remember { DetectorDatabase.get(ctx) }
     val anfrSites by db.anfrSiteDao().all().collectAsState(initial = emptyList())
 
-    val map = remember {
-        val conf = Configuration.getInstance()
-        conf.load(ctx, ctx.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        conf.userAgentValue = ctx.packageName
-        // Explicit, app-private cache dirs so tile writing never hits a missing
-        // path (a common osmdroid crash on first download).
-        val base = File(ctx.cacheDir, "osmdroid").apply { mkdirs() }
-        conf.osmdroidBasePath = base
-        conf.osmdroidTileCache = File(base, "tiles").apply { mkdirs() }
-        MapView(ctx).apply {
-            // Default MAPNIK forbids bulk download (OSM policy), which crashed
-            // CacheManager. This source permits bulk; a meaningful user-agent is
-            // set via Configuration. Keep downloads to small areas.
-            setTileSource(bulkOsmSource())
-            // Load tiles live while browsing (and cache them). Downloaded tiles
-            // then work offline. Monitoring never touches the network; only this
-            // map tab does, when open.
-            setUseDataConnection(true)
-            // Readable tiles on high-DPI screens (otherwise labels are tiny).
-            isTilesScaledToDpi = true
-            // Pinch-to-zoom only; the floating +/- buttons overlapped the map.
-            setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            // Sane zoom bounds and no infinite grey world when panning.
-            minZoomLevel = 4.0
-            maxZoomLevel = 19.0
-            setHorizontalMapRepetitionEnabled(false)
-            setVerticalMapRepetitionEnabled(false)
-            controller.setZoom(15.0)
-            controller.setCenter(GeoPoint(48.8566, 2.3522)) // Paris, until we have a fix
-        }
-    }
+    val map = remember { configuredMap(ctx) }
 
     var address by remember { mutableStateOf("") }
     var radius by remember { mutableStateOf("2000") }
     var status by remember { mutableStateOf("Choisis une adresse et un rayon, puis telecharge (a l'avance, hors zone sensible).") }
     var showWarn by remember { mutableStateOf(false) }
+    var fullscreen by remember { mutableStateOf(false) }
 
     // Centre on the user ONCE (first fix). Never recenter on later data updates,
     // otherwise the map keeps jumping and cannot be panned.
@@ -210,10 +211,16 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
 
         Text(status, color = Term.Muted)
 
+        DeckButton("OUVRIR EN PLEIN ECRAN", Term.Green, Modifier.fillMaxWidth()) { fullscreen = true }
+
         AndroidView(
             factory = { map },
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp).weight(1f)
         )
+    }
+
+    if (fullscreen) {
+        FullscreenMap(userLat, userLon, cells, anfrSites) { fullscreen = false }
     }
 
     if (showWarn) {
@@ -321,5 +328,39 @@ private fun downloadRadius(ctx: Context, map: MapView, radiusM: Int, onStatus: (
         })
     } catch (t: Throwable) {
         onStatus("Erreur telechargement: ${t.message ?: t.javaClass.simpleName}")
+    }
+}
+
+
+/** Full-screen map in a borderless dialog, for unobstructed panning and zoom. */
+@Composable
+private fun FullscreenMap(
+    userLat: Double?,
+    userLon: Double?,
+    cells: List<PlacedCell>,
+    anfr: List<AnfrSiteEntity>,
+    onClose: () -> Unit
+) {
+    val ctx = LocalContext.current
+    val map = remember { configuredMap(ctx, showZoomButtons = true) }
+
+    var centeredOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(userLat, userLon) {
+        if (!centeredOnce && userLat != null && userLon != null) {
+            map.controller.setCenter(GeoPoint(userLat, userLon)); centeredOnce = true
+        }
+    }
+    val userPoint = if (userLat != null && userLon != null) GeoPoint(userLat, userLon) else null
+    LaunchedEffect(cells, userPoint, anfr) { refreshMarkers(map, userPoint, cells, anfr) }
+    LaunchedEffect(Unit) { runCatching { map.onResume() } }
+    DisposableEffect(Unit) {
+        onDispose { runCatching { map.onPause() }; runCatching { map.onDetach() } }
+    }
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Term.Bg)) {
+            AndroidView(factory = { map }, modifier = Modifier.fillMaxSize())
+            DeckButton("FERMER", Term.Green, Modifier.align(Alignment.TopEnd).padding(12.dp)) { onClose() }
+        }
     }
 }
