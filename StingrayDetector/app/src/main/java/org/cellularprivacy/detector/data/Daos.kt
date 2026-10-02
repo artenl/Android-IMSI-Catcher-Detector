@@ -29,3 +29,22 @@ interface DetectionEventDao {
     @Query("DELETE FROM detection_event WHERE timestampMs < :cutoffMs")
     suspend fun purgeOlderThan(cutoffMs: Long)
 }
+
+
+@Dao
+interface AnfrSiteDao {
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertAll(sites: List<AnfrSiteEntity>)
+
+    @Query("SELECT * FROM anfr_site")
+    fun all(): Flow<List<AnfrSiteEntity>>
+
+    @Query("SELECT COUNT(*) FROM anfr_site")
+    fun count(): Flow<Int>
+
+    @Query("SELECT DISTINCT city FROM anfr_site")
+    fun cities(): Flow<List<String>>
+
+    @Query("DELETE FROM anfr_site")
+    suspend fun clear()
+}

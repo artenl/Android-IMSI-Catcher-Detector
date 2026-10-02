@@ -6,13 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ObservedCellEntity::class, DetectionEventEntity::class],
-    version = 1,
+    entities = [ObservedCellEntity::class, DetectionEventEntity::class, AnfrSiteEntity::class],
+    version = 2,
     exportSchema = true
 )
 abstract class DetectorDatabase : RoomDatabase() {
     abstract fun observedCellDao(): ObservedCellDao
     abstract fun detectionEventDao(): DetectionEventDao
+    abstract fun anfrSiteDao(): AnfrSiteDao
 
     companion object {
         @Volatile private var instance: DetectorDatabase? = null
@@ -23,7 +24,9 @@ abstract class DetectorDatabase : RoomDatabase() {
                     context.applicationContext,
                     DetectorDatabase::class.java,
                     "detector.db"
-                ).build().also { instance = it }
+                )
+                    .fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
     }
 }

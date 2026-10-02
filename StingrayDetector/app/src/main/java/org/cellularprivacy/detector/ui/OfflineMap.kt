@@ -32,6 +32,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.cellularprivacy.detector.anfr.AnfrClient
+import org.cellularprivacy.detector.data.AnfrSiteEntity
+import org.cellularprivacy.detector.data.DetectorDatabase
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.Color
 import org.cellularprivacy.detector.ui.theme.Term
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.cachemanager.CacheManager
@@ -78,6 +83,8 @@ private fun dot(argb: Int): Drawable = GradientDrawable().apply {
 fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val db = remember { DetectorDatabase.get(ctx) }
+    val anfrSites by db.anfrSiteDao().all().collectAsState(initial = emptyList())
 
     val map = remember {
         val conf = Configuration.getInstance()
@@ -128,7 +135,7 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     }
     // Refresh markers when cells change, WITHOUT moving the camera.
     val userPoint = if (userLat != null && userLon != null) GeoPoint(userLat, userLon) else null
-    LaunchedEffect(cells, userPoint) { refreshMarkers(map, userPoint, cells) }
+    LaunchedEffect(cells, userPoint, anfrSites) { refreshMarkers(map, userPoint, cells, anfrSites) }
 
     // osmdroid needs its lifecycle driven or tiles never start loading.
     LaunchedEffect(Unit) { runCatching { map.onResume() } }
@@ -166,13 +173,40 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
                     } else {
                         map.controller.setZoom(15.0)
                         map.controller.setCenter(p)
-                        refreshMarkers(map, p, cells)
+                        refreshMarkers(map, p, cells, anfrSites)
                         status = "Centre sur: ${address}. Pret a telecharger ${radius} m autour."
                     }
                 }
             }
         }
         DeckButton("TELECHARGER CETTE ZONE", Term.Amber, Modifier.fillMaxWidth()) { showWarn = true }
+
+        DeckButton("AJOUTER ANTENNES ANFR (${anfrSites.size})", ANFR_BLUE, Modifier.fillMaxWidth()) {
+            val c = map.mapCenter
+            if (c.latitude == 0.0 && c.longitude == 0.0) {
+                status = "Centre la carte sur une ville d'abord (bouton ALLER)."
+            } else {
+                val r = radius.toIntOrNull() ?: 2000
+                val label = address.ifBlank { "zone" }
+                status = "ANFR : telechargement autour de $label..."
+                scope.launch {
+                    val res = AnfrClient.fetchAround(c.latitude, c.longitude, r, label)
+                    if (res.error != null) {
+                        status = "ANFR erreur: ${res.error}"
+                    } else {
+                        db.anfrSiteDao().insertAll(res.sites)
+                        status = "ANFR : ${res.sites.size} sites ajoutes pour $label" +
+                            (if (res.truncated) " (zone dense, tronquee - reduis le rayon)" else "") +
+                            ". Points bleus = antennes officielles."
+                    }
+                }
+            }
+        }
+        if (anfrSites.isNotEmpty()) {
+            DeckButton("VIDER LES ANTENNES ANFR", Term.Muted, Modifier.fillMaxWidth()) {
+                scope.launch { db.anfrSiteDao().clear() }
+            }
+        }
 
         Text(status, color = Term.Muted)
 
@@ -210,8 +244,24 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     }
 }
 
-private fun refreshMarkers(map: MapView, center: GeoPoint?, cells: List<PlacedCell>) {
+private val ANFR_BLUE = Color(0xFF4FA3FF)
+
+private fun refreshMarkers(
+    map: MapView,
+    center: GeoPoint?,
+    cells: List<PlacedCell>,
+    anfr: List<AnfrSiteEntity>
+) {
     map.overlays.clear()
+    // Official ANFR sites first (under the estimated cells).
+    anfr.forEach { site ->
+        map.overlays.add(Marker(map).apply {
+            position = GeoPoint(site.lat, site.lon)
+            setAnchor(0.5f, 0.5f)
+            icon = dot(ANFR_BLUE.toArgb())
+            title = "ANFR ${site.operators} (${site.generations})"
+        })
+    }
     center?.let {
         map.overlays.add(Marker(map).apply {
             position = it; setAnchor(0.5f, 0.5f); icon = dot(Term.Green.toArgb()); title = "Centre"

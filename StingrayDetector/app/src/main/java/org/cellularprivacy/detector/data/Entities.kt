@@ -35,3 +35,16 @@ data class DetectionEventEntity(
     val lon: Double?,
     val timestampMs: Long
 )
+
+
+/** An official ANFR transmitter site (grouped emitters), for the map overlay. */
+@Entity(tableName = "anfr_site")
+data class AnfrSiteEntity(
+    @PrimaryKey val staId: String,
+    val lat: Double,
+    val lon: Double,
+    val operators: String,   // comma-separated, e.g. "ORANGE,SFR"
+    val generations: String, // comma-separated, e.g. "4G,5G"
+    val city: String,        // the query label it was downloaded under
+    val timestampMs: Long
+)
