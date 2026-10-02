@@ -34,7 +34,7 @@ data class PlacedCell(
     val level: ThreatLevel
 )
 
-private fun levelColor(level: ThreatLevel): Color = when (level) {
+internal fun levelColor(level: ThreatLevel): Color = when (level) {
     ThreatLevel.NORMAL, ThreatLevel.INFO -> Term.Green
     ThreatLevel.SUSPICIOUS -> Term.Amber
     ThreatLevel.HIGH -> Term.Red

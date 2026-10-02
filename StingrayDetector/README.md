@@ -53,8 +53,11 @@ no personal data, so the APK is not tied to the builder. `assembleDebug`
 produces the distributable APK; `assembleRelease` produces a smaller,
 R8-stripped variant signed with the same generic certificate.
 
-The app is network-silent: it declares no `INTERNET` permission and makes no
-outbound connections, so it reports nothing about its users or its author.
+Network use is confined to one explicit, user-initiated action: downloading
+offline map tiles (`INTERNET` permission). Monitoring, detection, the radar and
+all identifier handling stay fully offline and make no outbound connection. The
+offline-map download is meant to be done ahead of time, in a safe area, so that
+inside a sensitive zone the map works with no network at all.
 
 Residual traceability is not in the APK but in how it is shared: the source
 repository is public under its owner's account, and the file's distribution

@@ -178,7 +178,7 @@ private fun DeckScreen() {
         }
 
         when {
-            showMap -> MapRadar(radar.first?.first, radar.first?.second, radar.second)
+            showMap -> MapScreen(radar.first?.first, radar.first?.second, radar.second)
             showHarden -> HardenPanel(advisor, onOpen = { intent -> runCatching { ctx.startActivity(intent) } })
             showSettings -> SettingsPanel(
                 cfg = cfg,
@@ -331,7 +331,7 @@ private fun CommandRow(
 }
 
 @Composable
-private fun DeckButton(
+internal fun DeckButton(
     text: String,
     accent: Color,
     modifier: Modifier = Modifier,
