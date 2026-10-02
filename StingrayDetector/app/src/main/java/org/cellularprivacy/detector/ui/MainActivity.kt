@@ -62,6 +62,7 @@ import org.cellularprivacy.detector.panic.PanicController
 import org.cellularprivacy.detector.service.MonitoringService
 import org.cellularprivacy.detector.settings.AppSettings
 import org.cellularprivacy.detector.settings.PanicAction
+import org.cellularprivacy.detector.util.ExpertTools
 import org.cellularprivacy.detector.ui.theme.Term
 import org.cellularprivacy.detector.ui.theme.TerminalTheme
 import java.text.SimpleDateFormat
@@ -118,6 +119,7 @@ private fun DeckScreen() {
     var showHarden by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var show2gPrompt by remember { mutableStateOf(false) }
+    var showRadioWarn by remember { mutableStateOf(false) }
 
     // Propose disabling 2G on open (the best preventive measure), unless the
     // user asked not to be reminded or the OS cannot offer it.
@@ -175,8 +177,10 @@ private fun DeckScreen() {
                 adminActive = panic.isDeviceAdminActive(),
                 onAuto = { scope.launch { settings.setAutoProtect(it) } },
                 onAction = { scope.launch { settings.setPanicAction(it) } },
+                onExpert = { scope.launch { settings.setExpertMode(it) } },
                 onGrantAdmin = { adminLauncher.launch(panic.deviceAdminRequestIntent()) },
-                onAirplane = { runCatching { ctx.startActivity(panic.airplaneSettingsIntent()) } }
+                onAirplane = { runCatching { ctx.startActivity(panic.airplaneSettingsIntent()) } },
+                onRadioInfo = { showRadioWarn = true }
             )
             else -> EventLog(events)
         }
@@ -208,6 +212,34 @@ private fun DeckScreen() {
                     show2gPrompt = false
                     scope.launch { settings.setHideTwoGPrompt(true) }
                 }) { Text("NE PLUS PROPOSER", color = Term.Muted) }
+            }
+        )
+    }
+
+    if (showRadioWarn) {
+        AlertDialog(
+            containerColor = Term.Surface,
+            titleContentColor = Term.Amber,
+            textContentColor = Term.Muted,
+            onDismissRequest = { showRadioWarn = false },
+            title = { Text("RADIO INFO — ATTENTION") },
+            text = {
+                Text(
+                    "Cet ecran d'ingenierie affiche l'etat radio detaille (bandes, " +
+                        "NR, mode reseau), mais AUSSI des identifiants sensibles : IMEI, " +
+                        "IMSI et numero de telephone. Ne le capture pas et ne le partage pas."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRadioWarn = false
+                    runCatching { ctx.startActivity(ExpertTools.radioInfoIntent()) }
+                }) { Text("OUVRIR QUAND MEME", color = Term.Amber) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRadioWarn = false }) {
+                    Text("ANNULER", color = Term.Muted)
+                }
             }
         )
     }
@@ -364,8 +396,10 @@ private fun SettingsPanel(
     adminActive: Boolean,
     onAuto: (Boolean) -> Unit,
     onAction: (PanicAction) -> Unit,
+    onExpert: (Boolean) -> Unit,
     onGrantAdmin: () -> Unit,
-    onAirplane: () -> Unit
+    onAirplane: () -> Unit,
+    onRadioInfo: () -> Unit
 ) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("> CONFIG", color = Term.GreenDim)
@@ -404,6 +438,26 @@ private fun SettingsPanel(
                 if (adminActive) Term.GreenDim else Term.Amber
             ) { onGrantAdmin() }
             DeckButton("AIRPLANE", Term.Green) { onAirplane() }
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Mode expert", color = Term.Amber)
+            Switch(
+                checked = cfg.expertMode, onCheckedChange = onExpert,
+                colors = SwitchDefaults.colors(checkedTrackColor = Term.Amber)
+            )
+        }
+        if (cfg.expertMode) {
+            Text(
+                "Ecrans d'ingenierie avances. Affichent aussi des identifiants " +
+                    "sensibles (IMEI/IMSI). A n'utiliser que si tu sais ce que tu fais.",
+                color = Term.Muted
+            )
+            DeckButton("RADIO INFO", Term.Amber, Modifier.fillMaxWidth()) { onRadioInfo() }
         }
     }
 }
