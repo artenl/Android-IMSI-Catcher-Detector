@@ -35,7 +35,8 @@ import kotlinx.coroutines.withContext
 import org.cellularprivacy.detector.ui.theme.Term
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.cachemanager.CacheManager
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.TileSourcePolicy
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -43,6 +44,21 @@ import org.osmdroid.views.overlay.Marker
 import java.io.File
 import java.util.Locale
 import kotlin.math.cos
+
+private fun bulkOsmSource(): XYTileSource = XYTileSource(
+    "OSM", 0, 19, 256, ".png",
+    arrayOf(
+        "https://a.tile.openstreetmap.org/",
+        "https://b.tile.openstreetmap.org/",
+        "https://c.tile.openstreetmap.org/"
+    ),
+    "© OpenStreetMap contributors",
+    TileSourcePolicy(
+        2,
+        TileSourcePolicy.FLAG_USER_AGENT_MEANINGFUL or
+            TileSourcePolicy.FLAG_USER_AGENT_NORMALIZED
+    )
+)
 
 private fun dot(argb: Int): Drawable = GradientDrawable().apply {
     shape = GradientDrawable.OVAL
@@ -72,7 +88,10 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
         conf.osmdroidBasePath = base
         conf.osmdroidTileCache = File(base, "tiles").apply { mkdirs() }
         MapView(ctx).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
+            // Default MAPNIK forbids bulk download (OSM policy), which crashed
+            // CacheManager. This source permits bulk; a meaningful user-agent is
+            // set via Configuration. Keep downloads to small areas.
+            setTileSource(bulkOsmSource())
             setMultiTouchControls(true)
             // Load tiles live while browsing (and cache them). Downloaded tiles
             // then work offline. Monitoring never touches the network; only this
