@@ -108,7 +108,7 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
                 label = { Text("Rayon (m)") }, singleLine = true, colors = fieldColors,
                 modifier = Modifier.width(140.dp)
             )
-            DeckButton("ALLER", Term.Green) {
+            DeckButton("ALLER", Term.Green, Modifier.weight(1f)) {
                 scope.launch {
                     val p = geocode(ctx, address)
                     if (p == null) {
@@ -121,8 +121,8 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
                     }
                 }
             }
-            DeckButton("TELECHARGER", Term.Amber) { showWarn = true }
         }
+        DeckButton("TELECHARGER CETTE ZONE", Term.Amber, Modifier.fillMaxWidth()) { showWarn = true }
 
         Text(status, color = Term.Muted)
 
