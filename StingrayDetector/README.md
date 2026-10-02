@@ -53,11 +53,12 @@ no personal data, so the APK is not tied to the builder. `assembleDebug`
 produces the distributable APK; `assembleRelease` produces a smaller,
 R8-stripped variant signed with the same generic certificate.
 
-Network use is confined to one explicit, user-initiated action: downloading
-offline map tiles (`INTERNET` permission). Monitoring, detection, the radar and
-all identifier handling stay fully offline and make no outbound connection. The
-offline-map download is meant to be done ahead of time, in a safe area, so that
-inside a sensitive zone the map works with no network at all.
+Network use is confined to the CARTE (map) tab, which loads OpenStreetMap tiles
+and can pre-download a chosen area for offline use (`INTERNET` permission). The
+map touches the network only while that tab is open; pre-downloading a zone ahead
+of time, in a safe area, lets it work with no network inside a sensitive zone.
+Monitoring, detection, the radar and all identifier handling stay fully offline
+and make no outbound connection.
 
 Residual traceability is not in the APK but in how it is shared: the source
 repository is public under its owner's account, and the file's distribution

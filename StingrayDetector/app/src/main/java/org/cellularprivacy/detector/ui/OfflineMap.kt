@@ -74,8 +74,12 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
         MapView(ctx).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
-            setUseDataConnection(false)
-            controller.setZoom(14.0)
+            // Load tiles live while browsing (and cache them). Downloaded tiles
+            // then work offline. Monitoring never touches the network; only this
+            // map tab does, when open.
+            setUseDataConnection(true)
+            controller.setZoom(15.0)
+            controller.setCenter(GeoPoint(48.8566, 2.3522)) // Paris, until we have a fix
         }
     }
 
@@ -84,13 +88,24 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
     var status by remember { mutableStateOf("Choisis une adresse et un rayon, puis telecharge (a l'avance, hors zone sensible).") }
     var showWarn by remember { mutableStateOf(false) }
 
-    LaunchedEffect(userLat, userLon, cells) {
-        val center = if (userLat != null && userLon != null) GeoPoint(userLat, userLon) else null
-        center?.let { map.controller.setCenter(it) }
-        refreshMarkers(map, center, cells)
+    // Centre on the user ONCE (first fix). Never recenter on later data updates,
+    // otherwise the map keeps jumping and cannot be panned.
+    var centeredOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(userLat, userLon) {
+        if (!centeredOnce && userLat != null && userLon != null) {
+            map.controller.setCenter(GeoPoint(userLat, userLon))
+            centeredOnce = true
+        }
     }
+    // Refresh markers when cells change, WITHOUT moving the camera.
+    val userPoint = if (userLat != null && userLon != null) GeoPoint(userLat, userLon) else null
+    LaunchedEffect(cells, userPoint) { refreshMarkers(map, userPoint, cells) }
 
-    DisposableEffect(Unit) { onDispose { runCatching { map.onDetach() } } }
+    // osmdroid needs its lifecycle driven or tiles never start loading.
+    LaunchedEffect(Unit) { runCatching { map.onResume() } }
+    DisposableEffect(Unit) {
+        onDispose { runCatching { map.onPause() }; runCatching { map.onDetach() } }
+    }
 
     val fieldColors = TextFieldDefaults.colors(
         focusedTextColor = Term.Green, unfocusedTextColor = Term.Green,
@@ -211,16 +226,13 @@ private fun downloadRadius(ctx: Context, map: MapView, radiusM: Int, onStatus: (
             c.latitude + latSpan, c.longitude + lonSpan,
             c.latitude - latSpan, c.longitude - lonSpan
         )
-        map.setUseDataConnection(true)
         val cm = CacheManager(map)
         cm.downloadAreaAsync(ctx, bb, 12, 16, object : CacheManager.CacheManagerCallback {
             override fun onTaskComplete() {
-                runCatching { map.setUseDataConnection(false) }
-                onStatus("Carte telechargee. Mode hors-ligne reactive.")
+                onStatus("Zone telechargee. Elle restera visible hors-ligne.")
             }
             override fun onTaskFailed(errors: Int) {
-                runCatching { map.setUseDataConnection(false) }
-                onStatus("Termine avec $errors erreurs. Hors-ligne reactive.")
+                onStatus("Termine avec $errors erreurs (certaines tuiles manquent).")
             }
             override fun updateProgress(progress: Int, currentZoomLevel: Int, zoomMin: Int, zoomMax: Int) {
                 onStatus("Telechargement $progress% (zoom $currentZoomLevel/$zoomMax)")
@@ -229,7 +241,6 @@ private fun downloadRadius(ctx: Context, map: MapView, radiusM: Int, onStatus: (
             override fun setPossibleTilesInArea(total: Int) { onStatus("Tuiles a recuperer: $total") }
         })
     } catch (t: Throwable) {
-        runCatching { map.setUseDataConnection(false) }
         onStatus("Erreur telechargement: ${t.message ?: t.javaClass.simpleName}")
     }
 }
