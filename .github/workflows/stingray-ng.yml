@@ -11,7 +11,7 @@ on:
       - '.github/workflows/stingray-ng.yml'
 
 jobs:
-  unit-tests:
+  build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,3 +28,9 @@ jobs:
         run: gradle :app:testDebugUnitTest
       - name: Assemble debug APK
         run: gradle :app:assembleDebug
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: imsi-catcher-detector-debug
+          path: StingrayDetector/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

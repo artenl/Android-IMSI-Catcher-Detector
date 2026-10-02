@@ -10,6 +10,12 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.cellularprivacy.detector.detect.DetectorState
+import org.cellularprivacy.detector.panic.PanicController
+import org.cellularprivacy.detector.settings.AppSettings
+import org.cellularprivacy.detector.settings.PanicAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +41,10 @@ class MonitoringService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var collector: CellCollector
     private val engine = DetectionEngine()
+    private lateinit var settings: AppSettings
+    private lateinit var panic: PanicController
+    @Volatile private var settingsCache = AppSettings.Values()
+    @Volatile private var lastPanicMs = 0L
 
     // Wired to the accelerometer in a later slice; false = treat as stationary.
     @Volatile private var deviceMoving = false
@@ -44,7 +54,11 @@ class MonitoringService : Service() {
     override fun onCreate() {
         super.onCreate()
         collector = CellCollector(this)
+        settings = AppSettings(this)
+        panic = PanicController(this)
         createChannels()
+        scope.launch { settings.values.collect { settingsCache = it } }
+        DetectorState.setMonitoring(true)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -61,10 +75,18 @@ class MonitoringService : Service() {
             .catch { /* permission revoked or modem error: stop quietly */ }
             .onEach { batch ->
                 val assessment = engine.process(batch, operator, deviceMoving)
+                val serving = batch.firstOrNull { it.registered } ?: batch.firstOrNull()
+                val summary = serving?.let {
+                    "${it.rat.name} ${it.mcc ?: "?"}/${it.mnc ?: "?"} CID:${it.cellId ?: "?"} ${it.dbm ?: "?"}dBm"
+                } ?: "--"
+                DetectorState.update(assessment, summary)
+
                 if (assessment.level >= ThreatLevel.SUSPICIOUS) {
                     notifyThreat(assessment.level, assessment.score)
                 }
-                val serving = batch.firstOrNull { it.registered }
+                if (assessment.level >= ThreatLevel.HIGH && settingsCache.autoProtect) {
+                    maybePanic()
+                }
                 for (r in assessment.contributing) {
                     db.detectionEventDao().insert(
                         DetectionEventEntity(
@@ -129,7 +151,18 @@ class MonitoringService : Service() {
         )
     }
 
+    /** Fire the configured protective action, rate-limited to once per minute. */
+    private fun maybePanic() {
+        val now = System.currentTimeMillis()
+        if (now - lastPanicMs < 60_000L) return
+        lastPanicMs = now
+        if (settingsCache.panicAction != PanicAction.NONE) {
+            panic.execute(settingsCache.panicAction)
+        }
+    }
+
     override fun onDestroy() {
+        DetectorState.setMonitoring(false)
         scope.cancel()
         super.onDestroy()
     }
