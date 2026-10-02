@@ -191,8 +191,10 @@ private fun DeckScreen() {
             title = { Text("PROTECTION: DESACTIVER LA 2G") },
             text = {
                 Text(
-                    twoG.rationale + "\n\nC'est la meilleure protection preventive : " +
-                        "elle bloque la retrogradation forcee des IMSI-catchers sans couper votre reseau."
+                    twoG.rationale +
+                        "\n\nC'est la meilleure protection preventive : elle bloque la " +
+                        "retrogradation forcee des IMSI-catchers sans couper votre reseau.\n\n" +
+                        (twoG.steps ?: "")
                 )
             },
             confirmButton = {
@@ -343,9 +345,13 @@ private fun HardenPanel(advisor: HardeningAdvisor, onOpen: (Intent) -> Unit) {
                 val c = if (a.available) Term.Green else Term.Muted
                 Text(a.title, color = c, fontWeight = FontWeight.Bold)
                 Text(a.rationale, color = Term.Muted)
+                a.steps?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = Term.GreenDim)
+                }
                 if (a.available && a.settingsIntent != null) {
                     Spacer(Modifier.height(6.dp))
-                    DeckButton("OPEN SETTINGS", Term.Green) { onOpen(a.settingsIntent) }
+                    DeckButton("OUVRIR LES REGLAGES", Term.Green) { onOpen(a.settingsIntent) }
                 }
             }
         }

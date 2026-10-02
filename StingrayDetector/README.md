@@ -45,22 +45,21 @@ cd StingrayDetector
 The cloud dev container has no Android SDK, so the APK is built in CI; the
 detection tests run on any JVM.
 
-## Release signing
+## Signing and distribution privacy
 
-`keystore.properties` (git-ignored) supplies the release key; without it,
-release falls back to debug signing so CI still builds. To sign your own
-release build:
+There is no personal release key. Every build is signed with the generic
+Android debug certificate (`CN=Android Debug, O=Android, C=US`), which carries
+no personal data, so the APK is not tied to the builder. `assembleDebug`
+produces the distributable APK; `assembleRelease` produces a smaller,
+R8-stripped variant signed with the same generic certificate.
 
-```
-keytool -genkeypair -v -keystore StingrayDetector/release.jks -alias imsicd \
-  -keyalg RSA -keysize 2048 -validity 10000
-# then create StingrayDetector/keystore.properties:
-#   storeFile=release.jks
-#   storePassword=...
-#   keyAlias=imsicd
-#   keyPassword=...
-./gradlew :app:assembleRelease
-```
+The app is network-silent: it declares no `INTERNET` permission and makes no
+outbound connections, so it reports nothing about its users or its author.
+
+Residual traceability is not in the APK but in how it is shared: the source
+repository is public under its owner's account, and the file's distribution
+channel (email, messaging, cloud link) can identify the sender. Neutralising
+the APK does not neutralise those.
 
 ## Roadmap
 

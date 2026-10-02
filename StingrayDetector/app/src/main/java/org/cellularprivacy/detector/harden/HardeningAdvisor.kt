@@ -45,7 +45,14 @@ class HardeningAdvisor(private val context: Context) {
             title = "Désactiver la 2G",
             rationale = twoGRationale,
             available = sdk >= Build.VERSION_CODES.S, // Android 12
-            settingsIntent = radioInfoOrWireless()
+            settingsIntent = mobileNetworkSettings(),
+            steps = "Ouvre les réglages réseau mobile, puis :\n" +
+                "• Samsung : Connexions > Gestionnaire de carte SIM > ta SIM, " +
+                "ou Connexions > Réseaux mobiles, puis désactive « Autoriser la 2G ».\n" +
+                "• Android standard (Pixel) : Réseau et Internet > SIM > ta SIM > " +
+                "« Autoriser la 2G » : désactiver.\n" +
+                "Si tu ne vois pas « Autoriser la 2G », choisis un mode réseau " +
+                "« 5G/4G » ou « LTE uniquement ». L'emplacement varie selon le téléphone."
         )
 
         list += HardeningAdvice(
@@ -54,7 +61,9 @@ class HardeningAdvisor(private val context: Context) {
             rationale = "Empêche la connexion aux cellules qui désactivent le " +
                 "chiffrement. Dépend du modem.",
             available = sdk >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE, // Android 14
-            settingsIntent = securitySettings()
+            settingsIntent = securitySettings(),
+            steps = "Sécurité et confidentialité > Sécurité du réseau mobile > " +
+                "« Exiger le chiffrement » (le libellé peut varier)."
         )
 
         list += HardeningAdvice(
@@ -64,19 +73,26 @@ class HardeningAdvisor(private val context: Context) {
                 "connecte sans chiffrement ou communique son IMSI/IMEI. Nécessite un " +
                 "modem IRadio 3.0 (Pixel récents et quelques flagships).",
             available = sdk >= 36, // Android 16
-            settingsIntent = securitySettings()
+            settingsIntent = securitySettings(),
+            steps = "Sécurité et confidentialité > Sécurité du réseau mobile > " +
+                "active les notifications (connexion non chiffrée, divulgation d'identifiants)."
         )
 
         return list
     }
 
-    /** Hidden "Radio info" screen exposes per-SIM 2G; fall back to wireless settings. */
-    private fun radioInfoOrWireless(): Intent? {
-        val radioInfo = Intent().setClassName(
-            "com.android.phone", "com.android.phone.settings.RadioInfo"
-        )
-        return if (radioInfo.resolveActivity(context.packageManager) != null) radioInfo
-        else Intent(Settings.ACTION_WIRELESS_SETTINGS)
+    /**
+     * The standard mobile-network settings page (per-SIM "Allow 2G" lives a
+     * couple of taps in from here). We deliberately avoid the hidden RadioInfo
+     * screen: it is unreadable and exposes IMEI/IMSI, which defeats the point of
+     * a privacy tool.
+     */
+    private fun mobileNetworkSettings(): Intent? {
+        val mobile = Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS)
+        return if (mobile.resolveActivity(context.packageManager) != null) mobile
+        else Intent(Settings.ACTION_WIRELESS_SETTINGS).takeIf {
+            it.resolveActivity(context.packageManager) != null
+        }
     }
 
     private fun securitySettings(): Intent? =

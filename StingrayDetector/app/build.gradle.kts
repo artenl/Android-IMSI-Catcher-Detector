@@ -1,24 +1,8 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
-}
-
-// Release signing is read from keystore.properties (git-ignored) so the keys
-// never enter the repo. Without it, release falls back to debug signing so CI
-// still builds. Generate a key with:
-//   keytool -genkeypair -v -keystore release.jks -alias imsicd //     -keyalg RSA -keysize 2048 -validity 10000
-// then create StingrayDetector/keystore.properties with:
-//   storeFile=release.jks
-//   storePassword=...
-//   keyAlias=imsicd
-//   keyPassword=...
-val keystorePropsFile = rootProject.file("keystore.properties")
-val keystoreProps = Properties().apply {
-    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
 
 android {
@@ -34,29 +18,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    signingConfigs {
-        if (keystoreProps.isNotEmpty()) {
-            create("release") {
-                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
-            }
-        }
-    }
-
     buildTypes {
         release {
+            // No personal release key. The release variant exists only to strip
+            // metadata via R8; it is signed with the generic Android debug
+            // certificate (CN=Android Debug), which carries no personal data.
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (keystoreProps.isNotEmpty()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -91,10 +63,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.osmdroid.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
