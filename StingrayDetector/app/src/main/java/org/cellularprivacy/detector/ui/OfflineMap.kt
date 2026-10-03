@@ -6,10 +6,13 @@ import android.graphics.drawable.GradientDrawable
 import android.location.Geocoder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -151,7 +154,10 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
         cursorColor = Term.Green
     )
 
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         Text("> CARTE HORS-LIGNE", color = Term.GreenDim)
 
         OutlinedTextField(
@@ -212,10 +218,12 @@ fun OfflineMap(userLat: Double?, userLon: Double?, cells: List<PlacedCell>) {
         Text(status, color = Term.Muted)
 
         DeckButton("OUVRIR EN PLEIN ECRAN", Term.Green, Modifier.fillMaxWidth()) { fullscreen = true }
+        Text("Apercu ci-dessous. Pour circuler sans gener les boutons, ouvre le plein ecran.",
+            color = Term.Muted)
 
         AndroidView(
             factory = { map },
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp).weight(1f)
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp).height(320.dp)
         )
     }
 

@@ -17,7 +17,12 @@ data class DetectionContext(
     /** Facts about the active SIM. */
     val operator: OperatorFacts,
     /** Whether the device is currently moving (from the accelerometer). */
-    val deviceMoving: Boolean
+    val deviceMoving: Boolean,
+    /** Current GPS position, if known. */
+    val userLat: Double? = null,
+    val userLon: Double? = null,
+    /** Official ANFR sites currently loaded (empty if no data pack). */
+    val anfr: List<AnfrRef> = emptyList()
 ) {
     /** Network MCC as seen on the serving cell (208 = France). */
     val networkMcc: Int? get() = serving?.mcc

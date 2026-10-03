@@ -29,6 +29,7 @@ import org.cellularprivacy.detector.data.DetectionEventEntity
 import org.cellularprivacy.detector.collect.LocationProvider
 import org.cellularprivacy.detector.data.DetectorDatabase
 import org.cellularprivacy.detector.data.ObservedCellEntity
+import org.cellularprivacy.detector.detect.AnfrRef
 import org.cellularprivacy.detector.detect.DetectionEngine
 import org.cellularprivacy.detector.model.ThreatLevel
 
@@ -46,6 +47,7 @@ class MonitoringService : Service() {
     private lateinit var settings: AppSettings
     private lateinit var panic: PanicController
     @Volatile private var settingsCache = AppSettings.Values()
+    @Volatile private var anfrCache: List<AnfrRef> = emptyList()
     @Volatile private var lastPanicMs = 0L
 
     private lateinit var accelerometer: AccelerometerMonitor
@@ -64,6 +66,13 @@ class MonitoringService : Service() {
         location.start()
         createChannels()
         scope.launch { settings.values.collect { settingsCache = it } }
+        scope.launch {
+            DetectorDatabase.get(this@MonitoringService).anfrSiteDao().all().collect { sites ->
+                anfrCache = sites.map {
+                    AnfrRef(it.operators.split(",").filter { s -> s.isNotBlank() }.toSet(), it.lat, it.lon)
+                }
+            }
+        }
         DetectorState.setMonitoring(true)
     }
 
@@ -82,7 +91,10 @@ class MonitoringService : Service() {
             .onEach { batch ->
                 val moving = accelerometer.isMoving()
                 val loc = location.last
-                val assessment = engine.process(batch, operator, moving)
+                val assessment = engine.process(
+                    batch, operator, moving,
+                    userLat = loc?.latitude, userLon = loc?.longitude, anfr = anfrCache
+                )
                 val serving = batch.firstOrNull { it.registered } ?: batch.firstOrNull()
                 val summary = serving?.let {
                     "${it.rat.name} ${it.mcc ?: "?"}/${it.mnc ?: "?"} CID:${it.cellId ?: "?"} ${it.dbm ?: "?"}dBm"

@@ -12,6 +12,8 @@ object HeuristicWeights {
     const val EMPTY_NEIGHBOR_LIST = 20
     const val SUSPICIOUS_PHYSICAL = 35
     const val SIGNAL_ANOMALY = 20
+    const val ANFR_MISMATCH = 35
+    const val ANFR_RADIUS_M = 3000.0
 
     const val FRANCE_MCC = 208
 

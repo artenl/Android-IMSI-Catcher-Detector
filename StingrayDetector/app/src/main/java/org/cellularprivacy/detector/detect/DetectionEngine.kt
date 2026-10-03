@@ -4,6 +4,7 @@ import org.cellularprivacy.detector.collect.OperatorFacts
 import org.cellularprivacy.detector.detect.heuristics.EmptyNeighborListHeuristic
 import org.cellularprivacy.detector.detect.heuristics.OperatorMismatchHeuristic
 import org.cellularprivacy.detector.detect.heuristics.RatDowngradeHeuristic
+import org.cellularprivacy.detector.detect.heuristics.AnfrMismatchHeuristic
 import org.cellularprivacy.detector.detect.heuristics.SignalAnomalyHeuristic
 import org.cellularprivacy.detector.detect.heuristics.SuspiciousPhysicalParamsHeuristic
 import org.cellularprivacy.detector.detect.heuristics.UnknownStrongCellHeuristic
@@ -25,7 +26,10 @@ class DetectionEngine(
     fun process(
         batch: List<CellSnapshot>,
         operator: OperatorFacts,
-        deviceMoving: Boolean
+        deviceMoving: Boolean,
+        userLat: Double? = null,
+        userLon: Double? = null,
+        anfr: List<AnfrRef> = emptyList()
     ): Assessment {
         val serving = pickServing(batch)
         val ctx = DetectionContext(
@@ -33,7 +37,10 @@ class DetectionEngine(
             visible = batch,
             history = history,
             operator = operator,
-            deviceMoving = deviceMoving
+            deviceMoving = deviceMoving,
+            userLat = userLat,
+            userLon = userLon,
+            anfr = anfr
         )
 
         // Use observation time, not wall-clock, so scoring/decay is driven by the
@@ -64,7 +71,8 @@ class DetectionEngine(
             OperatorMismatchHeuristic(),
             EmptyNeighborListHeuristic(),
             SuspiciousPhysicalParamsHeuristic(),
-            SignalAnomalyHeuristic()
+            SignalAnomalyHeuristic(),
+            AnfrMismatchHeuristic()
         )
     }
 }
